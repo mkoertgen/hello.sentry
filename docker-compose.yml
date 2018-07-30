@@ -1,0 +1,57 @@
+version: '3.4'
+
+x-proxy: &proxy
+  http_proxy: ${http_proxy}
+  https_proxy: ${https_proxy}
+  no_proxy: ${no_proxy}
+
+x-sentry: &sentry
+  image: sentry:9.0.0
+  restart: unless-stopped
+  depends_on:
+    - redis
+    - postgres
+  environment: &sentry_env
+    # Run `docker-compose run web config generate-secret-key`
+    # to get the SENTRY_SECRET_KEY value.
+    SENTRY_SECRET_KEY: 'xesmwjon3d5b5!l95xcsr_eb(_srr8a5fvxrg6lkfj6wyja18n'
+    SENTRY_REDIS_HOST: redis
+    SENTRY_POSTGRES_HOST: postgres
+  volumes: #&sentry_vol
+    - sentry-data:/var/lib/sentry/files
+
+volumes:
+  sentry-data:
+  sentry-postgres:
+
+services:
+  redis:
+    restart: unless-stopped
+    image: redis:4.0.7-alpine
+
+  postgres:
+    restart: unless-stopped
+    image: postgres:9.5
+    volumes:
+      - sentry-postgres:/var/lib/postgresql/data
+
+  web:
+    <<: *sentry
+    ports:
+      - '9000:9000'
+    environment:
+      <<: *sentry_env
+      SENTRY_ADMIN_EMAIL: ${SENTRY_ADMIN_EMAIL:-admin@acme.com}
+      SENTRY_ADMIN_PASS: ${SENTRY_ADMIN_PASS:-admin123}
+    volumes:
+      - sentry-data:/var/lib/sentry/files
+      - ./start.sh:/start.sh
+    command: /start.sh
+
+  cron:
+    <<: *sentry
+    command: run cron
+
+  worker:
+    <<: *sentry
+    command: run worker
